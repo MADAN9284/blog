@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AngularJS Single Page Blog App</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; }
+        h1, h2 { text-align: center; }
+        input, textarea, button { display: block; width: 100%; margin: 10px 0; padding: 8px; }
+        .post { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;margin-left: 10px; }
+        .comment { margin-left: 20px; font-style: italic; }
+        .delete-btn { color: white; cursor: pointer; float: right;width: 100px;background-color: #ff6600; padding: 5px; }
+        .pagination { text-align: center; margin-top: 15px; }
+        .pagination button { margin: 5px; padding: 8px 15px; }
+        .form-container { background-color:white; padding: 15px; border-radius: 5px; margin-top: 20px; }
+        .form-container input, .form-container textarea { background-color: white; }
+    </style>
+</head>
+<body ng-app="blogApp" ng-controller="BlogController">
+  <app-root></app-root>
+    <h1>Simple Blog Application</h1>
+
+    <!-- Button to Show Add Blog Form -->
+    <div>
+        <button ng-click="toggleAddForm()" style="width: 200px; background-color: #4CAF50; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">Add Blog</button>
+    </div>
+    
+    <!-- Form to Add a New Blog Post, visible when toggleAddForm() is called -->
+    <div ng-show="showAddForm" class="form-container">
+        <h2>Add a Blog Post</h2>
+        <form ng-submit="addPost()">
+            <input type="text" ng-model="newPost.title" placeholder="Title" required>
+            <textarea ng-model="newPost.content" placeholder="Content" required></textarea>
+            <button type="submit" style="width: 200px; background-color: #4CAF50; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">
+                Add Post
+            </button>
+        </form>
+    </div>
+
+    <!-- Blog Posts -->
+    <h2>Blog Posts</h2>
+    <div ng-repeat="post in paginatedPosts()" class="post">
+        <h3>{{ post.title }}</h3>
+        <p>{{ post.content }}</p>
+        <p><strong>Created At:</strong> {{ post.created_at | date:'yyyy-MM-dd' }}</p>
+        <div>
+            <span class="delete-btn" ng-click="deletePost(post.id)">Blog Delete</span>
+            <br/>
+        </div>
+        <br/><hr/><br/>
+
+        <!-- Comments Section -->
+        <h4>Comments</h4>
+        <div ng-repeat="comment in post.comments" class="comment">
+            <div>
+                <p>{{ comment.content }} <span class="delete-btn" ng-click="deleteComment(comment.id)">Comment Delete</span></p><br/>
+            </div>
+        </div><br/>
+
+        <!-- Add Comment -->
+        <input type="text" ng-model="newComment[post.id]" placeholder="Write a comment">
+        <button ng-click="addComment(post.id)" style="width: 200px; background-color: #4CAF50; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">Add Comment</button>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+        <button ng-click="prevPage()" ng-disabled="currentPage === 1">Previous</button>
+        Page {{ currentPage }} of {{ totalPages() }}
+        <button ng-click="nextPage()" ng-disabled="currentPage >= totalPages()">Next</button>
+    </div>
+
+    <script>
+        var app = angular.module('blogApp', []);
+
+        app.controller('BlogController', function($scope, $http) {
+            $scope.posts = [];
+            $scope.newPost = {};
+            $scope.newComment = {};
+            $scope.currentPage = 1;
+            $scope.pageSize = 5;
+            $scope.showAddForm = false;  
+
+            // Load Blog Posts with Comments
+            function loadPosts() {
+                $http.get("http://localhost:8085/api/blog/").then(function(response) {
+                    if (response.data.status) {
+                        $scope.posts = response.data.data;
+                        $scope.posts.forEach(post => {
+                            loadComments(post.id);
+                        });
+                    }
+                });
+            }
+
+            // Load Comments for a Post
+            function loadComments(postId) {
+                $http.get("http://localhost:8085/api/comments/" + postId).then(function(response) {
+                    if (response.data.status) {
+                        $scope.posts.find(post => post.id === postId).comments = response.data.data;
+                    }
+                });
+            }
+
+            // Add Blog Post
+            $scope.addPost = function() {
+                if (!$scope.newPost.title || !$scope.newPost.content) {
+                    alert("Title and content are required!");
+                    return;
+                }
+
+                $http.post("http://localhost:8085/api/blog/add", $scope.newPost).then(function(response) {
+                    if (response.data.status) {
+                        loadPosts();
+                        $scope.newPost = {}; // Clear input fields
+                        $scope.showAddForm = false;  // Hide the form after submission
+
+                        // Show an alert message
+                        alert("Blog post added successfully!");
+                    }
+                });
+            };
+
+            // Delete Blog Post
+            $scope.deletePost = function(postId) {
+                $http.delete("http://localhost:8085/api/blog/delete/" + postId).then(function(response) {
+                    if (response.data.status) {
+                        loadPosts();
+
+                        // Show an alert message
+                        alert("Blog post deleted successfully!");
+                    }
+                });
+            };
+
+            // Add Comment
+            $scope.addComment = function(postId) {
+                let commentData = { post_id: postId, content: $scope.newComment[postId] };
+                $http.post("http://localhost:8085/api/comment/add", commentData).then(function(response) {
+                    if (response.data.status) {
+                        loadComments(postId);
+                        $scope.newComment[postId] = ""; 
+
+                      
+                        alert("Comment added successfully!");
+                    }
+                });
+            };
+
+            // Delete Comment
+            $scope.deleteComment = function(commentId) {
+                $http.delete("http://localhost:8085/api/comment/delete/" + commentId).then(function(response) {
+                    if (response.data.status) {
+                        loadPosts(); 
+
+                    
+                        alert("Comment deleted successfully!");
+                    }
+                });
+            };
+
+            // Pagination Functions
+            $scope.paginatedPosts = function() {
+                let start = ($scope.currentPage - 1) * $scope.pageSize;
+                return $scope.posts.slice(start, start + $scope.pageSize);
+            };
+
+            $scope.totalPages = function() {
+                return Math.ceil($scope.posts.length / $scope.pageSize);
+            };
+
+            $scope.nextPage = function() {
+                if ($scope.currentPage < $scope.totalPages()) {
+                    $scope.currentPage++;
+                }
+            };
+
+            $scope.prevPage = function() {
+                if ($scope.currentPage > 1) {
+                    $scope.currentPage--;
+                }
+            };
+
+            // Load all posts initially
+            loadPosts();
+
+            // Toggle the visibility of the Add Blog Form
+            $scope.toggleAddForm = function() {
+                $scope.showAddForm = !$scope.showAddForm;
+            };
+        });
+    </script>
+    <script>
+      var app = angular.module('blogApp', []);
+  
+      app.controller('BlogController', function($scope, $http) {
+          $scope.posts = [];
+          $scope.newPost = {};
+          $scope.newComment = {};
+          $scope.currentPage = 1;
+          $scope.pageSize = 5;
+          $scope.showAddForm = false;
+  
+          function loadPosts() {
+              $http.get("http://localhost:8085/api/blog/").then(function(response) {
+                  if (response.data.status) {
+                      $scope.posts = response.data.data;
+                      $scope.posts.forEach(post => {
+                          loadComments(post.id);
+                      });
+                  }
+              });
+          }
+  
+          function loadComments(postId) {
+              $http.get("http://localhost:8085/api/comments/" + postId).then(function(response) {
+                  if (response.data.status) {
+                      $scope.posts.find(post => post.id === postId).comments = response.data.data;
+                  }
+              });
+          }
+  
+          $scope.addPost = function() {
+              if (!$scope.newPost.title || !$scope.newPost.content) {
+                  alert("Title and content are required!");
+                  return;
+              }
+  
+              $http.post("http://localhost:8085/api/blog/add", $scope.newPost).then(function(response) {
+                  if (response.data.status) {
+                      loadPosts();
+                      $scope.newPost = {};
+                      $scope.showAddForm = false;
+                      alert("Blog post added successfully!");
+                  }
+              });
+          };
+  
+          $scope.deletePost = function(postId) {
+              $http.delete("http://localhost:8085/api/blog/delete/" + postId).then(function(response) {
+                  if (response.data.status) {
+                      loadPosts();
+                      alert("Blog post deleted successfully!");
+                  }
+              });
+          };
+  
+          $scope.addComment = function(postId) {
+              if (!$scope.newComment[postId] || $scope.newComment[postId].trim() === '') {
+                  alert("Comment cannot be empty!");
+                  return;
+              }
+  
+              let commentData = { post_id: postId, content: $scope.newComment[postId] };
+              $http.post("http://localhost:8085/api/comment/add", commentData).then(function(response) {
+                  if (response.data.status) {
+                      loadComments(postId);
+                      $scope.newComment[postId] = "";
+                      alert("Comment added successfully!");
+                  }
+              });
+          };
+  
+          $scope.deleteComment = function(commentId) {
+              $http.delete("http://localhost:8085/api/comment/delete/" + commentId).then(function(response) {
+                  if (response.data.status) {
+                      loadPosts();
+                      alert("Comment deleted successfully!");
+                  }
+              });
+          };
+  
+          $scope.paginatedPosts = function() {
+              let start = ($scope.currentPage - 1) * $scope.pageSize;
+              return $scope.posts.slice(start, start + $scope.pageSize);
+          };
+  
+          $scope.totalPages = function() {
+              return Math.ceil($scope.posts.length / $scope.pageSize);
+          };
+  
+          $scope.nextPage = function() {
+              if ($scope.currentPage < $scope.totalPages()) {
+                  $scope.currentPage++;
+              }
+          };
+  
+          $scope.prevPage = function() {
+              if ($scope.currentPage > 1) {
+                  $scope.currentPage--;
+              }
+          };
+  
+          loadPosts();
+  
+          $scope.toggleAddForm = function() {
+              $scope.showAddForm = !$scope.showAddForm;
+          };
+      });
+  </script>
+  
+</body>
+</html>
